@@ -1,0 +1,10 @@
+\contentsline {section}{Executive Summary}{2}{section*.2}
+\contentsline {section}{Research Questions}{3}{section*.3}
+\contentsline {section}{Statistical Methodology}{3}{section*.4}
+\contentsline {subsection}{Data cleaning}{3}{section*.5}
+\contentsline {subsection}{Investigation on percentage of stop and search on people with black ethnicity}{4}{section*.6}
+\contentsline {subsubsection}{Graphs on percentage of stop and search on people with black ethnicity}{4}{section*.7}
+\contentsline {subsubsection}{Conclusion}{6}{section*.8}
+\contentsline {subsection}{Investigation on severity of punishment after stop and search on people different ethnicity}{6}{section*.9}
+\contentsline {subsection}{Limitations}{7}{section*.10}
+\contentsline {section}{References}{8}{section*.11}

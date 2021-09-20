@@ -1,0 +1,412 @@
+---
+title: "ST344 CollectionGraphics"
+author: "u1801116"
+date: "2021/3/11"
+output: html_document
+---
+  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.pos='H')
+```
+
+```{r echo=FALSE, message=FALSE}
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(VIM)
+library(tidyverse)
+library("ggpubr")
+```
+
+
+
+```{r echo=FALSE}
+#Load data and select my forces
+load("stopSearch_assignment.rda")
+stopSearchmyForces <- stopSearch[which(stopSearch$Force=="gwent"|
+                                         stopSearch$Force=="metropolitan"|
+                                         stopSearch$Force=="south-yorkshire"),]
+
+stopSearchmyForces$`Self-defined ethnicity`[stopSearchmyForces$`Self-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Officer-defined ethnicity`[stopSearchmyForces$`Officer-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Object of search`[stopSearchmyForces$`Object of search` == ""] <- NA
+stopSearchmyForces$`Outcome`[stopSearchmyForces$`Outcome` == ""] <- NA
+```
+
+
+```{r echo=FALSE}
+#Add a new column representing whether there is missing data
+stopSearchmyForces <- stopSearchmyForces %>%
+  mutate(OfficerdefinedEthnicityNA = ifelse(is.na(`Officer-defined ethnicity`), "Missing", "Not missing"))
+
+ggplot(data=stopSearchmyForces, aes(Date, colour=OfficerdefinedEthnicityNA)) + 
+  geom_density(size = 1.1) + 
+  ggtitle("The distributon of missing and non-missing values of Officer-defined Ethnicity by date") + 
+  theme_bw() +
+  theme(plot.title = element_text(size = 12), legend.position = "bottom", axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  facet_wrap(~Force)
+```
+
+
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, results=FALSE}
+stopSearchmyForces$YearMonth <- format(stopSearchmyForces$Date, "%Y-%m")
+
+#Add new variable pctBlack for investigation
+stopSearch.gwent <- stopSearchmyForces[which(stopSearchmyForces$Force=="gwent"),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Officer-defined ethnicity`),]
+stopSearch.gwent <- stopSearch.gwent %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+stopSearch.metropolitan <- stopSearchmyForces[which(stopSearchmyForces$Force=="metropolitan"),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Officer-defined ethnicity`),]
+stopSearch.metropolitan <- stopSearch.metropolitan %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+stopSearch.southyorkshire <- stopSearchmyForces[which(stopSearchmyForces$Force=="south-yorkshire"),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Officer-defined ethnicity`),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+#Combining demographic data
+stopnsearchdata <- read.csv("stop-and-search-data.csv")
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Geography=="Gwent"|
+                                           stopnsearchdata$Geography=="Metropolitan Police"|
+                                           stopnsearchdata$Geography=="South Yorkshire"),]
+
+#Select time from year 2017 till 2020 (Note that financial years starts at 6th April each year)
+unique(stopnsearchdata$Time)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Time=="2017/18"|
+                                           stopnsearchdata$Time=="2018/19"|
+                                           stopnsearchdata$Time=="2019/20"),]
+
+#Check type of type of classification of ethnic group used
+unique(stopSearchmyForces$`Officer-defined ethnicity`)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Ethnicity_type=="ONS 2001 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="ONS 2011 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="All"),]
+
+#Selected columns that are meaning, the columns with demographic information
+stopnsearchdata <- subset(stopnsearchdata, select = c(Time,Ethnicity,Population.by.ethnicity,Geography))
+
+#Data cleaning, removing comma
+stopnsearchdata$Population.by.ethnicity <- as.numeric(gsub(",","",stopnsearchdata$Population.by.ethnicity))
+
+#Split into different forces
+stopnsearchdata.gwent <- stopnsearchdata[which(stopnsearchdata$Geography=="Gwent"),]
+stopnsearchdata.metropolitan <- stopnsearchdata[which(stopnsearchdata$Geography=="Metropolitan Police"),]
+stopnsearchdata.southyorkshire <- stopnsearchdata[which(stopnsearchdata$Geography=="South Yorkshire"),]
+
+#Gwent
+stopnsearchdata.gwent <- stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="All"|
+                                                       stopnsearchdata.gwent$Ethnicity=="Black"),]
+stopnsearchdata.gwent.black <- stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="Black"),]
+stopnsearchdata.gwent.black$Black.Pop <- stopnsearchdata.gwent.black$Population.by.ethnicity
+
+stopnsearchdata.gwent <- cbind(stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="All"),],
+                               stopnsearchdata.gwent.black$Black.Pop)
+stopnsearchdata.gwent <- mutate(stopnsearchdata.gwent, pctBlackPop = 
+                                  stopnsearchdata.gwent.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2019-03-31"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.gwent$pctBlackPop, times=c(6,12,0))
+stopnsearchdata.gwent <- tibble(YearMonth,BlackPop.overtime)
+
+#Metropolitan
+stopnsearchdata.metropolitan <- stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="All"|
+                                                       stopnsearchdata.metropolitan$Ethnicity=="Black"),]
+stopnsearchdata.metropolitan.black <- stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="Black"),]
+stopnsearchdata.metropolitan.black$Black.Pop <- stopnsearchdata.metropolitan.black$Population.by.ethnicity
+
+stopnsearchdata.metropolitan <- cbind(stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="All"),],
+                               stopnsearchdata.metropolitan.black$Black.Pop)
+stopnsearchdata.metropolitan <- mutate(stopnsearchdata.metropolitan, pctBlackPop = 
+                                  stopnsearchdata.metropolitan.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2020-09-30"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.metropolitan$pctBlackPop, times=c(6,12,18))
+stopnsearchdata.metropolitan <- tibble(YearMonth,BlackPop.overtime)
+
+#South Yorkshire
+stopnsearchdata.southyorkshire <- stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="All"|                                                                     stopnsearchdata.southyorkshire$Ethnicity=="Black"),]
+stopnsearchdata.southyorkshire.black <- stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="Black"),]
+stopnsearchdata.southyorkshire.black$Black.Pop <- stopnsearchdata.southyorkshire.black$Population.by.ethnicity
+
+stopnsearchdata.southyorkshire <- cbind(stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="All"),],
+                               stopnsearchdata.southyorkshire.black$Black.Pop)
+stopnsearchdata.southyorkshire <- mutate(stopnsearchdata.southyorkshire, pctBlackPop = 
+                                  stopnsearchdata.southyorkshire.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2020-09-30"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.southyorkshire$pctBlackPop, times=c(6,12,18))
+stopnsearchdata.southyorkshire <- tibble(YearMonth,BlackPop.overtime)
+```
+
+
+
+```{r echo=FALSE, results=FALSE, warning=FALSE, message=FALSE}
+gwent.pctBlack <- merge(stopSearch.gwent, stopnsearchdata.gwent, by = "YearMonth")
+gwent.pctBlack <- subset(gwent.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+gwent.pctBlack <- distinct(gwent.pctBlack)
+
+#Linear model building
+gwent.pctBlack <- cbind(gwent.pctBlack, months = seq(1, 18, by = 1))
+gwent.fit <- lm(formula = pctBlack ~ months, data = gwent.pctBlack)
+
+#Predicting
+gwent.pctBlack$predicted <- predict(gwent.fit)
+gwent.plot <- ggplot(data = gwent.pctBlack, aes(x=YearMonth, y=pctBlack)) +
+  geom_point(color="blue") +
+  geom_line(aes(x=months, y=predicted), color="blue") +
+  geom_hline(yintercept = 0.5522285) +
+  ggtitle("Percentage of stop and search by Gwent on Black from Oct2017 till Mar2019") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(size = 13))
+
+metropolitan.pctBlack <- merge(stopSearch.metropolitan, stopnsearchdata.metropolitan, by = "YearMonth")
+metropolitan.pctBlack <- subset(metropolitan.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+metropolitan.pctBlack <- distinct(metropolitan.pctBlack)
+
+#Linear model building
+metropolitan.pctBlack <- cbind(metropolitan.pctBlack, months = seq(1, 36, by = 1))
+metropolitan.fit <- lm(formula = pctBlack ~ months, data = metropolitan.pctBlack)
+
+#Predicting
+metropolitan.pctBlack$predicted <- predict(metropolitan.fit)
+metropolitan.plot <- ggplot(data = metropolitan.pctBlack, aes(x=YearMonth, y=pctBlack)) +
+  geom_point(color="blue") +
+  geom_line(aes(x=months, y=predicted), color="blue") +
+  geom_hline(yintercept = 13.32809) +
+  ggtitle("Percentage of stop and search by Metropolitan on Black from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  ylim(0,60) +
+  theme(axis.text.x = element_text(size = 4,angle = 90), plot.title = element_text(size = 6))
+
+southyorkshire.pctBlack <- merge(stopSearch.southyorkshire, stopnsearchdata.southyorkshire, by = "YearMonth")
+southyorkshire.pctBlack <- subset(southyorkshire.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+southyorkshire.pctBlack <- distinct(southyorkshire.pctBlack)
+
+#Linear model building
+southyorkshire.pctBlack <- cbind(southyorkshire.pctBlack, months = seq(1, 36, by = 1))
+southyorkshire.fit.first6 <- lm(formula = pctBlack ~ months, data = southyorkshire.pctBlack[1:6,])
+southyorkshire.fit.after6 <- lm(formula = pctBlack ~ months, data = southyorkshire.pctBlack[7:36,])
+
+#Predicting
+southyorkshire.pctBlack$predictedfirst6[1:6] <- predict(southyorkshire.fit.first6)
+southyorkshire.pctBlack$predictedfirst6[7:36] <- NA
+southyorkshire.pctBlack$predictedafter6[7:36] <- predict(southyorkshire.fit.after6)
+southyorkshire.pctBlack$whetherfirst6[1:6] <- 1
+southyorkshire.pctBlack$whetherfirst6[7:36] <- 0
+southyorkshire.plot <- ggplot(data = southyorkshire.pctBlack, aes(x=YearMonth, y=pctBlack,
+                                                                color=as.factor(whetherfirst6))) +
+  geom_point() +
+  scale_color_manual(breaks = c("1", "0"), values=c("red", "blue")) +
+  geom_line(aes(x=months, y=predictedfirst6), color="red") +
+  geom_line(aes(x=months, y=predictedafter6), color="blue") +
+  geom_hline(yintercept = 1.91664) +
+  ggtitle("Percentage of stop and search by South-Yorkshire on Black from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  theme(axis.text.x = element_text(size = 4,angle = 90), plot.title = element_text(size = 6),
+        legend.position = "none")
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+ggarrange(metropolitan.plot, southyorkshire.plot,
+                    ncol = 2, nrow = 1)
+```
+
+
+
+```{r echo=FALSE}
+stopSearch.gwent <- stopSearchmyForces[which(stopSearchmyForces$Force=="gwent"),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Object of search`),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$Outcome),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Self-defined ethnicity`),]
+
+stopSearch.metropolitan <- stopSearchmyForces[which(stopSearchmyForces$Force=="metropolitan"),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Object of search`),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$Outcome),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Self-defined ethnicity`),]
+
+stopSearch.southyorkshire <- stopSearchmyForces[which(stopSearchmyForces$Force=="south-yorkshire"),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Object of search`),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$Outcome),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Self-defined ethnicity`),]
+
+gwent.Outcome <- subset(stopSearch.gwent, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+gwent.Outcome <- gwent.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+metropolitan.Outcome <- subset(stopSearch.metropolitan, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+metropolitan.Outcome <- metropolitan.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+southyorkshire.Outcome <- subset(stopSearch.southyorkshire, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+southyorkshire.Outcome <- southyorkshire.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+gwent.Outcome <-  gwent.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action")) %>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+
+metropolitan.Outcome <-  metropolitan.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action"))%>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+
+southyorkshire.Outcome <-  southyorkshire.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action"))%>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+```
+
+```{r echo=FALSE, results=FALSE, message=FALSE,warning=FALSE}
+gwent.plot2 <-ggplot(data = gwent.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity, 
+                                 group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by Gwent from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(size=4,angle = 90), plot.title = element_text(size = 6),legend.position = "None")
+
+metropolitan.plot2 <- ggplot(data = metropolitan.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity,
+                                        group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by Metropolitan from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(size = 10))
+
+southyorkshire.plot2 <- ggplot(data = southyorkshire.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity,
+                                          group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by South Yorkshire from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(size=4,angle = 90), plot.title = element_text(size = 6),legend.position = "None")
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+metropolitan.plot2
+```
+
+```{r echo=FALSE, message=FALSE,results=FALSE}
+#Combing demographic data
+stopnsearchdata <- read.csv("stop-and-search-data.csv")
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Geography=="Gwent"|
+                                           stopnsearchdata$Geography=="Metropolitan Police"|
+                                           stopnsearchdata$Geography=="South Yorkshire"),]
+
+#Select time from year 2017 till 2020 (Note that financial years starts at 6th April each year)
+unique(stopnsearchdata$Time)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Time=="2017/18"|
+                                           stopnsearchdata$Time=="2018/19"|
+                                           stopnsearchdata$Time=="2019/20"),]
+
+#Check type of type of classification of ethnic group used
+unique(stopSearchmyForces$`Officer-defined ethnicity`)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Ethnicity_type=="ONS 2001 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="ONS 2011 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="All"),]
+
+#Selected columns that are meaning, the columns with demographic information
+stopnsearchdata <- subset(stopnsearchdata, select = c(Time,Ethnicity,Population.by.ethnicity,Geography,
+                                                      Rate.per.1.000.population.by.ethnicity,
+                                                      Number.of.stop.and.searches))
+
+#Data cleaning on our main data
+stopSearchmyForces$`Self-defined ethnicity`[stopSearchmyForces$`Self-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Officer-defined ethnicity`[stopSearchmyForces$`Officer-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Object of search`[stopSearchmyForces$`Object of search` == ""] <- NA
+stopSearchmyForces$`Outcome`[stopSearchmyForces$`Outcome` == ""] <- NA
+stopSearchmyForces$`Legislation`[stopSearchmyForces$`Legislation` == ""] <- NA
+
+#Split data into three Forces to see if there are significant missing data in any forces
+stopSearchgwent <- stopSearchmyForces[which(stopSearchmyForces$Force=="gwent"),]
+stopSearchmetropolitan <- stopSearchmyForces[which(stopSearchmyForces$Force=="metropolitan"),]
+stopSearchsouthyorkshire <- stopSearchmyForces[which(stopSearchmyForces$Force=="south-yorkshire"),]
+
+sum(is.na(stopSearchgwent$`Officer-defined ethnicity`))
+sum(is.na(stopSearchmetropolitan$`Officer-defined ethnicity`))
+sum(is.na(stopSearchsouthyorkshire$`Officer-defined ethnicity`))
+```
+
+```{r echo=FALSE}
+#Looking into metropolitan
+stopSearchmetropolitan <- stopSearchmetropolitan[!is.na(stopSearchmetropolitan$`Officer-defined ethnicity`),]
+ggplot(data = stopSearchmetropolitan, aes(x=factor(`Officer-defined ethnicity`), fill=Legislation)) +
+  ggtitle("Number of stop and search by Metropolitan Force by Ethnicity") +
+  geom_bar(stat = "count") +
+  ylab("Number of stop and search") +
+  xlab("Officer defined ethnicity")
+```
+
+
+
+
+
+
+
+
+

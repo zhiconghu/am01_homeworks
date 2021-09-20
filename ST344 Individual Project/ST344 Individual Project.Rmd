@@ -1,0 +1,483 @@
+---
+title: "ST344 Individual Assessment"
+author: Zhicong Hu
+date: "March 2021"
+fontsize: 11pt
+output:
+  html_document: default
+  pdf_document: default
+bibliography: Reference.bib
+  
+header-includes: 
+- \usepackage{float}
+---
+<style type="text/css">
+body, td {
+   font-size: 11px;
+}
+code.r{
+  font-size: 9px;
+}
+pre {
+  font-size: 9px
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.pos='H')
+```
+
+```{r echo=FALSE, message=FALSE}
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(VIM)
+library(tidyverse)
+library("ggpubr")
+```
+
+\newpage
+
+# Executive Summary
+
+Our research questions of the report are:
+
+1) Does Police forces target on people with Black ethnicity during stop and search?
+
+2) Does Police forces uses harder punishment towards a specific ethnicity after stop and search?
+
+Regarding our first research question:
+
+* There are ethnic-specific bias towards people with black ethnicity when deciding on targets to conduct stop and search at all three forces, Gwent, Metropolitan and South Yorkshire.
+
+* The bias is most apparent in areas that have less black population.
+
+* This bias has been slow resolving in Metropolitan and South Yorkshire over the years but has been increasing in Gwent.
+
+Regarding our second research question:
+
+* There are ethnic-specific bias issues when deciding on whether to make a punishment after stop and search have been conducted at Metropolitan Police.
+
+* In Metropolitan areas, Mixed ethnicity has the highest percentage of over 30% to receive a punishment while Other ethnicity, including ethnicity such as Arab, has the lowest percentage of less than 20% to receive a punishment.
+
+* In Metropolitan areas, there is a general trend of lower percentage of punishment made for all ethnicities over the years from October 2017 to October 2020.
+
+* In the other two areas, Gwent and South Yorkshire, there are no ethnic-specific bias when it comes to deciding on whether to make a punishment after stop and search have been conducted.
+
+\newpage
+
+# Research Questions
+
+In this report, we aim to investigate bias against specific ethnicities within the following areas:
+
+* Gwent Police covered areas, Blaenau Gwent, Caerphilly, Monmouthshire, Newport and Torfaen from @GwentPolice.
+
+* Metropolitan Police covered areas, 32 boroughs within Greater London, excluding the City of London from @MetropolitanPolice.
+
+* South Yorkshire Police covered areas, Barnsley, Doncaster and Rotherham from @SouthyorkshirePolice.
+
+In this report, we aim to answer the following research questions regarding ethical bias during police stop and search.
+
+1) Does Police forces target on people with Black ethnicity during stop and search?
+
+2) Does Police forces uses harder punishment towards a specific ethnicity after stop and search?
+
+# Statistical Methodology
+
+```{r echo=FALSE}
+#Load data and select my forces
+load("stopSearch_assignment.rda")
+stopSearchmyForces <- stopSearch[which(stopSearch$Force=="gwent"|
+                                         stopSearch$Force=="metropolitan"|
+                                         stopSearch$Force=="south-yorkshire"),]
+
+stopSearchmyForces$`Self-defined ethnicity`[stopSearchmyForces$`Self-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Officer-defined ethnicity`[stopSearchmyForces$`Officer-defined ethnicity` == ""] <- NA
+stopSearchmyForces$`Object of search`[stopSearchmyForces$`Object of search` == ""] <- NA
+stopSearchmyForces$`Outcome`[stopSearchmyForces$`Outcome` == ""] <- NA
+```
+
+## Data cleaning
+
+First for data cleaning, we will subset the data set to our assigned forces, **gwent**, **metropolitan** and **south-yorkshire**. From our research questions, we are only interested in several variables, **Date**, **Self-defined ethnicity**, **Officer-defined ethnicity**, **Object of search**, **Outcome**, hence we will only look into the missing values for these variables. During this investigation on missing values, we will also split the three forces for separate investigation because missing data are vastly different in each force possibly due to systematic errors. We will first look into missing values in **Self-defined ethnicity** using missing value density plots.
+
+```{r echo=FALSE, fig.cap="The distributon of missing and non-missing values of Officer-defined Ethnicity by date", out.width="40%", fig.align = 'center'}
+#Add a new column representing whether there is missing data
+stopSearchmyForces <- stopSearchmyForces %>%
+  mutate(OfficerdefinedEthnicityNA = ifelse(is.na(`Officer-defined ethnicity`), "Missing", "Not missing"))
+
+ggplot(data=stopSearchmyForces, aes(Date, colour=OfficerdefinedEthnicityNA)) + 
+  geom_density(size = 1.1) + 
+  ggtitle("The distributon of missing and non-missing values of Officer-defined Ethnicity by date") + 
+  theme_bw() +
+  theme(plot.title = element_text(size = 13), legend.position = "bottom", axis.text.y = element_blank(),
+        axis.ticks.y = element_blank()) +
+  facet_wrap(~Force)
+```
+
+As we can see from the plots, with the police force Gwent, all data regarding Officer-defined ethnicity after March 2019 is missing. This might be due to systematic errors where the police force no longer records this. With the police force Metropolitan, the density plot for missing values and non-missing values seems to overlap, this can mean that these values are missing completely at random (MCAR). With the police force South Yorkshire, there is a big discrepancy in missing values from October 2017 to March 2018 but after which the missing values seems to be MCAR as well.
+
+In conclusion, we decide to remove all missing values as interpolating them might lead to inaccurate data. In this case, we can only investigate 18 months of data for Gwent instead of 36 months like the rest and we need be more aware of the time from Oct2017 to Mar2018 for South Yorkshire. After similar missing value investigation on other variables, we decide to remove all missing values of our relevant variables in each part of our report.
+
+## Investigation on percentage of stop and search on people with black ethnicity
+
+To investigate the whether if there is bias against people with black ethnicity, we need to find the percentage of stop and search on people with black ethnicity. To further investigate, we should compare the percentage of stop and search and the percentage of the population of that ethnicity to see if there is bias. In this part of the investigation, we chose the variable **Officer-defined ethnicity** as we are interest in ethnic-specific bias when deciding whether to stop and search and self-defined ethnicity is not yet known. Hence, **Officer-defined ethnicity** tells us whether the police forces tend to search on people of black ethnicity more.
+
+To find percentage of population of specific ethnicities, we got our data from @stopnsearchdata. We use the data to find the percentage of people with black ethnicity in the entire population within the police force areas. Using this data, we are aware that the percentage of black population did not change during the 3 years of our investigation but this is valid as population usually do not change very frequently.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE, results=FALSE}
+stopSearchmyForces$YearMonth <- format(stopSearchmyForces$Date, "%Y-%m")
+
+#Add new variable pctBlack for investigation
+stopSearch.gwent <- stopSearchmyForces[which(stopSearchmyForces$Force=="gwent"),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Officer-defined ethnicity`),]
+stopSearch.gwent <- stopSearch.gwent %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+stopSearch.metropolitan <- stopSearchmyForces[which(stopSearchmyForces$Force=="metropolitan"),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Officer-defined ethnicity`),]
+stopSearch.metropolitan <- stopSearch.metropolitan %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+stopSearch.southyorkshire <- stopSearchmyForces[which(stopSearchmyForces$Force=="south-yorkshire"),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Officer-defined ethnicity`),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire %>%
+  group_by(YearMonth) %>%
+  add_tally() %>%
+  mutate(pctBlack = (sum(`Officer-defined ethnicity`=="Black")*100/n))
+
+#Combining demographic data
+stopnsearchdata <- read.csv("stop-and-search-data.csv")
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Geography=="Gwent"|
+                                           stopnsearchdata$Geography=="Metropolitan Police"|
+                                           stopnsearchdata$Geography=="South Yorkshire"),]
+
+#Select time from year 2017 till 2020 (Note that financial years starts at 6th April each year)
+unique(stopnsearchdata$Time)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Time=="2017/18"|
+                                           stopnsearchdata$Time=="2018/19"|
+                                           stopnsearchdata$Time=="2019/20"),]
+
+#Check type of type of classification of ethnic group used
+unique(stopSearchmyForces$`Officer-defined ethnicity`)
+stopnsearchdata <- stopnsearchdata[which(stopnsearchdata$Ethnicity_type=="ONS 2001 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="ONS 2011 5+1"|
+                                           stopnsearchdata$Ethnicity_type=="All"),]
+
+#Selected columns that are meaning, the columns with demographic information
+stopnsearchdata <- subset(stopnsearchdata, select = c(Time,Ethnicity,Population.by.ethnicity,Geography))
+
+#Data cleaning, removing comma
+stopnsearchdata$Population.by.ethnicity <- as.numeric(gsub(",","",stopnsearchdata$Population.by.ethnicity))
+
+#Split into different forces
+stopnsearchdata.gwent <- stopnsearchdata[which(stopnsearchdata$Geography=="Gwent"),]
+stopnsearchdata.metropolitan <- stopnsearchdata[which(stopnsearchdata$Geography=="Metropolitan Police"),]
+stopnsearchdata.southyorkshire <- stopnsearchdata[which(stopnsearchdata$Geography=="South Yorkshire"),]
+
+#Gwent
+stopnsearchdata.gwent <- stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="All"|
+                                                       stopnsearchdata.gwent$Ethnicity=="Black"),]
+stopnsearchdata.gwent.black <- stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="Black"),]
+stopnsearchdata.gwent.black$Black.Pop <- stopnsearchdata.gwent.black$Population.by.ethnicity
+
+stopnsearchdata.gwent <- cbind(stopnsearchdata.gwent[which(stopnsearchdata.gwent$Ethnicity=="All"),],
+                               stopnsearchdata.gwent.black$Black.Pop)
+stopnsearchdata.gwent <- mutate(stopnsearchdata.gwent, pctBlackPop = 
+                                  stopnsearchdata.gwent.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2019-03-31"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.gwent$pctBlackPop, times=c(6,12,0))
+stopnsearchdata.gwent <- tibble(YearMonth,BlackPop.overtime)
+
+#Metropolitan
+stopnsearchdata.metropolitan <- stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="All"|
+                                                       stopnsearchdata.metropolitan$Ethnicity=="Black"),]
+stopnsearchdata.metropolitan.black <- stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="Black"),]
+stopnsearchdata.metropolitan.black$Black.Pop <- stopnsearchdata.metropolitan.black$Population.by.ethnicity
+
+stopnsearchdata.metropolitan <- cbind(stopnsearchdata.metropolitan[which(stopnsearchdata.metropolitan$Ethnicity=="All"),],
+                               stopnsearchdata.metropolitan.black$Black.Pop)
+stopnsearchdata.metropolitan <- mutate(stopnsearchdata.metropolitan, pctBlackPop = 
+                                  stopnsearchdata.metropolitan.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2020-09-30"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.metropolitan$pctBlackPop, times=c(6,12,18))
+stopnsearchdata.metropolitan <- tibble(YearMonth,BlackPop.overtime)
+
+#South Yorkshire
+stopnsearchdata.southyorkshire <- stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="All"|                                                                     stopnsearchdata.southyorkshire$Ethnicity=="Black"),]
+stopnsearchdata.southyorkshire.black <- stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="Black"),]
+stopnsearchdata.southyorkshire.black$Black.Pop <- stopnsearchdata.southyorkshire.black$Population.by.ethnicity
+
+stopnsearchdata.southyorkshire <- cbind(stopnsearchdata.southyorkshire[which(stopnsearchdata.southyorkshire$Ethnicity=="All"),],
+                               stopnsearchdata.southyorkshire.black$Black.Pop)
+stopnsearchdata.southyorkshire <- mutate(stopnsearchdata.southyorkshire, pctBlackPop = 
+                                  stopnsearchdata.southyorkshire.black$Black.Pop*100/Population.by.ethnicity)
+
+YearMonth <- format(seq(as.Date("2017-10-01"), as.Date("2020-09-30"), by = 'month'), '%Y-%m')
+BlackPop.overtime <- rep(stopnsearchdata.southyorkshire$pctBlackPop, times=c(6,12,18))
+stopnsearchdata.southyorkshire <- tibble(YearMonth,BlackPop.overtime)
+```
+
+With these data, we will plot to see the percentage of stop and search on people with black ethnicity and the percentage of people with black ethnicity in the population. The black line represents the percentage of people with black ethnicity in the population while the colored points and lines represent the percentage of stop and search on people with black ethnicity over time. As previously mentioned, the black line for all three plots are horizontal lines as the percentage of people with black ethnicity in the population did not change from Oct2017 to Nov2017.
+
+### Graphs on percentage of stop and search on people with black ethnicity
+
+The graph below shows the result for the Gwent Police areas.
+
+```{r echo=FALSE, results=FALSE, warning=FALSE, message=FALSE}
+gwent.pctBlack <- merge(stopSearch.gwent, stopnsearchdata.gwent, by = "YearMonth")
+gwent.pctBlack <- subset(gwent.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+gwent.pctBlack <- distinct(gwent.pctBlack)
+
+#Linear model building
+gwent.pctBlack <- cbind(gwent.pctBlack, months = seq(1, 18, by = 1))
+gwent.fit <- lm(formula = pctBlack ~ months, data = gwent.pctBlack)
+
+#Predicting
+gwent.pctBlack$predicted <- predict(gwent.fit)
+gwent.plot <- ggplot(data = gwent.pctBlack, aes(x=YearMonth, y=pctBlack)) +
+  geom_point(color="blue") +
+  geom_line(aes(x=months, y=predicted), color="blue") +
+  geom_hline(yintercept = 0.5522285) +
+  ggtitle("Percentage of stop and search by Gwent on Black from Oct2017 till Mar2019") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(size = 13))
+
+metropolitan.pctBlack <- merge(stopSearch.metropolitan, stopnsearchdata.metropolitan, by = "YearMonth")
+metropolitan.pctBlack <- subset(metropolitan.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+metropolitan.pctBlack <- distinct(metropolitan.pctBlack)
+
+#Linear model building
+metropolitan.pctBlack <- cbind(metropolitan.pctBlack, months = seq(1, 36, by = 1))
+metropolitan.fit <- lm(formula = pctBlack ~ months, data = metropolitan.pctBlack)
+
+#Predicting
+metropolitan.pctBlack$predicted <- predict(metropolitan.fit)
+metropolitan.plot <- ggplot(data = metropolitan.pctBlack, aes(x=YearMonth, y=pctBlack)) +
+  geom_point(color="blue") +
+  geom_line(aes(x=months, y=predicted), color="blue") +
+  geom_hline(yintercept = 13.32809) +
+  ggtitle("Percentage of stop and search by Metropolitan on Black from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  ylim(0,60) +
+  theme(axis.text.x = element_text(size = 4,angle = 90), plot.title = element_text(size = 6))
+
+southyorkshire.pctBlack <- merge(stopSearch.southyorkshire, stopnsearchdata.southyorkshire, by = "YearMonth")
+southyorkshire.pctBlack <- subset(southyorkshire.pctBlack, select = c(YearMonth,pctBlack,BlackPop.overtime))
+southyorkshire.pctBlack <- distinct(southyorkshire.pctBlack)
+
+#Linear model building
+southyorkshire.pctBlack <- cbind(southyorkshire.pctBlack, months = seq(1, 36, by = 1))
+southyorkshire.fit.first6 <- lm(formula = pctBlack ~ months, data = southyorkshire.pctBlack[1:6,])
+southyorkshire.fit.after6 <- lm(formula = pctBlack ~ months, data = southyorkshire.pctBlack[7:36,])
+
+#Predicting
+southyorkshire.pctBlack$predictedfirst6[1:6] <- predict(southyorkshire.fit.first6)
+southyorkshire.pctBlack$predictedfirst6[7:36] <- NA
+southyorkshire.pctBlack$predictedafter6[7:36] <- predict(southyorkshire.fit.after6)
+southyorkshire.pctBlack$whetherfirst6[1:6] <- 1
+southyorkshire.pctBlack$whetherfirst6[7:36] <- 0
+southyorkshire.plot <- ggplot(data = southyorkshire.pctBlack, aes(x=YearMonth, y=pctBlack,
+                                                                color=as.factor(whetherfirst6))) +
+  geom_point() +
+  scale_color_manual(breaks = c("1", "0"), values=c("red", "blue")) +
+  geom_line(aes(x=months, y=predictedfirst6), color="red") +
+  geom_line(aes(x=months, y=predictedafter6), color="blue") +
+  geom_hline(yintercept = 1.91664) +
+  ggtitle("Percentage of stop and search by South-Yorkshire on Black from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of stop and search on black") +
+  theme(axis.text.x = element_text(size = 4,angle = 90), plot.title = element_text(size = 6),
+        legend.position = "none")
+```
+
+```{r echo=FALSE, fig.cap="Percentage of stop and search by Gwent on Black from Oct2017 till Mar2019", out.width="40%", fig.align = 'center', warning=FALSE, message=FALSE}
+gwent.plot
+```
+
+As mentioned previously, for Gwent Police, they stopped recording the variable **Officer-defined ethnicity** after March 2019, hence our graph shows only data until March 2019.
+
+We fitted a linear model to the percentage of stop and search on people with black ethnicity with months. This shows us how ethnic-specific bias changes overtime. The percentage of people with black ethnicity in the population is `r gwent.pctBlack[1,"BlackPop.overtime"]`. The intercept of the model is `r coef(gwent.fit)[1]` and the coefficient for months is `r coef(gwent.fit)[2]`. From the graph and our linear model, we can deduce that Gwent Police areas are areas with majority of the population being non-Black. However, the percentage of stop and search on black people is greater than the percentage of black people in the population. Furthermore, the percentage is increasing with `r coef(gwent.fit)[2]` each month. This represents ethnic-specific bias towards the black ethnicity in the areas.
+
+```{r echo=FALSE, fig.cap="Percentage of stop and search by Metropolitan and South Yorkshire on Black from Oct2017 till Oct2020", out.width="70%", fig.align = 'center', warning=FALSE, message=FALSE}
+ggarrange(metropolitan.plot, southyorkshire.plot,
+                    ncol = 2, nrow = 1)
+```
+
+The percentage of people with black ethnicity in the population is `r metropolitan.pctBlack[1,"BlackPop.overtime"]`. The intercept of the model is `r coef(metropolitan.fit)[1]` and the coefficient for months is `r coef(metropolitan.fit)[2]`. From our model and the graph, we can still deduce that there are ethical bias during stop and search towards people with black ethnicity but with every month, it is decreasing by `r coef(metropolitan.fit)[2]`. This means that in the Metropolitan Police areas, the problem of ethical bias are slowing being resolve. However, it is worth mentioning that there seems to be a cyclic relation where the percentage of stop and search on people with black ethnicity increasing every month and peaks at the July of every year, it then falls sharply in August.
+
+For the South Yorkshire Police areas, we see a very interesting sharp drop in the percentage of stop and search on people with black ethnicity. This happened on April 2018, which is also the time where there was a shape drop in the number of missing data on **Officer-defined ethnicity**. These two drops can have relationships that are worthy of further investigations.
+
+In responds to the sharp drop, we decided to fit two separate linear models to percentage of stop and search on people with black ethnicity with months. 
+
+* In the first six months, the intercept of the model is `r coef(southyorkshire.fit.first6)[1]` and the coefficient for months is `r coef(southyorkshire.fit.first6)[2]`.
+
+* After the first six months, the intercept of the model is `r coef(southyorkshire.fit.after6)[1]` and the coefficient for months is `r coef(southyorkshire.fit.after6)[2]`.
+
+Due to the issue of missing values, we would ignore the data of the first six months. From our model and the graph, we can still deduce that there are major ethical bias during stop and search towards people with black ethnicity. The percentage of stop and search on black people are almost 5 times the percentage of black population in these areas. However, the bias seems to be slowly resolving with the percentage dropping by `r coef(southyorkshire.fit.after6)[2]` every month.
+
+### Conclusion
+
+Generally, we can see that there are ethical bias towards people with black ethnicity during stop and search missions. However, it is less of an issue at places that with higher percentage of black population. In Metropolitan and South Yorkshire, the bias is slowly being resolved with less percentage of stop and search on the black population overtime. On the other hand, the bias is increasing rapidly in Gwent until March 2019 but our available data stops there, whether it is still an issue requires further investigation.
+
+## Investigation on severity of punishment after stop and search on people different ethnicity
+
+To investigate the whether if there is bias any ethnicity, we need to find the percentage of punishment after stop and search. In this part of the investigation, we chose the variable **Self-defined ethnicity** as we are interest in ethnic-specific bias after stop and search and after self-defined ethnicity declared. Hence, **Self-defined ethnicity** tells us whether the police forces tend to punish more people of any ethnicity. In this investigation we use "ONS 2001 5+1" as our standard ethnic groups from @ethicalgroup. In the data, before 2018, "Nothing found - no further action" and after 2018, "A no further action disposal" means the same thing from @meaningdisposal. This means no punishment is made while the rest indicates where a punishment was made.
+
+```{r echo=FALSE}
+stopSearch.gwent <- stopSearchmyForces[which(stopSearchmyForces$Force=="gwent"),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Object of search`),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$Outcome),]
+stopSearch.gwent <- stopSearch.gwent[!is.na(stopSearch.gwent$`Self-defined ethnicity`),]
+
+stopSearch.metropolitan <- stopSearchmyForces[which(stopSearchmyForces$Force=="metropolitan"),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Object of search`),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$Outcome),]
+stopSearch.metropolitan <- stopSearch.metropolitan[!is.na(stopSearch.metropolitan$`Self-defined ethnicity`),]
+
+stopSearch.southyorkshire <- stopSearchmyForces[which(stopSearchmyForces$Force=="south-yorkshire"),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Object of search`),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$Outcome),]
+stopSearch.southyorkshire <- stopSearch.southyorkshire[!is.na(stopSearch.southyorkshire$`Self-defined ethnicity`),]
+
+gwent.Outcome <- subset(stopSearch.gwent, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+gwent.Outcome <- gwent.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+metropolitan.Outcome <- subset(stopSearch.metropolitan, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+metropolitan.Outcome <- metropolitan.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+southyorkshire.Outcome <- subset(stopSearch.southyorkshire, select = c(`Self-defined ethnicity`, `Object of search`, Outcome, YearMonth))
+southyorkshire.Outcome <- southyorkshire.Outcome %>%
+  mutate(Ethnicity = ifelse(`Self-defined ethnicity`=="White - English/Welsh/Scottish/Northern Irish/British"|
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Any other White background" |
+                              `Self-defined ethnicity`=="White - Irish", "White", 
+                            ifelse(`Self-defined ethnicity`=="Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black Caribbean"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Black African"|
+                                     `Self-defined ethnicity`=="Mixed/Multiple ethnic groups - White and Asian", "Mixed", ifelse(`Self-defined ethnicity`=="Asian/Asian British - Bangladeshi"|                                                     `Self-defined ethnicity`=="Asian/Asian British - Any other Asian background"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Pakistani"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Indian"|
+                  `Self-defined ethnicity`=="Asian/Asian British - Chinese", "Asian",
+                  ifelse(`Self-defined ethnicity`=="Black/African/Caribbean/Black British - African"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Caribbean"|
+                           `Self-defined ethnicity`=="Black/African/Caribbean/Black British - Any other Black/African/Caribbean background", "Black", "Other")))))
+
+gwent.Outcome <-  gwent.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action")) %>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+
+metropolitan.Outcome <-  metropolitan.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action"))%>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+
+southyorkshire.Outcome <-  southyorkshire.Outcome %>%
+  mutate(WhetherAction = ifelse(Outcome == "Nothing found - no further action"|
+                                  Outcome == "A no further action disposal", "No Action", "Action"))%>%
+  group_by(Ethnicity, YearMonth) %>%
+  add_tally() %>%
+  mutate(pctAction = sum(`WhetherAction`=="Action")*100/n)
+```
+
+```{r echo=FALSE, results=FALSE, message=FALSE,warning=FALSE}
+gwent.plot2 <-ggplot(data = gwent.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity, 
+                                 group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by Gwent from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(size=4,angle = 90), plot.title = element_text(size = 6),legend.position = "None")
+
+metropolitan.plot2 <- ggplot(data = metropolitan.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity,
+                                        group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by Gwent from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(size = 10))
+
+southyorkshire.plot2 <- ggplot(data = southyorkshire.Outcome, aes(x=YearMonth, y=pctAction, color=Ethnicity,
+                                          group=Ethnicity)) +
+  geom_point() +
+  geom_line() +
+  ggtitle("Percentage of action made after stop and search by Gwent from Oct2017 till Oct2020") +
+  xlab("Year-Month") +
+  ylab("Percentage of action made after stop and search") +
+  theme(axis.text.x = element_text(size=4,angle = 90), plot.title = element_text(size = 6),legend.position = "None")
+```
+
+```{r echo=FALSE, fig.cap="Percentage of punishment by Gwent and South Yorkshire from Oct2017 till Oct2020", out.width="50%", fig.align = 'center', warning=FALSE, message=FALSE}
+metropolitan.plot2
+```
+
+In Metropolitan Police areas, there are clearly three classes of ethnicity bias when it comes to percentage of punishment after stop and search is conducted. The highest percentage of punishment being on Mixed ethnicity with almost higher than 30% for every months from Oct2017 to Oct2020. After which, Asian, Black and White have similar percentage of punishment of between 20% to 30% for the same period. Lastly, Other ethnicity that includes ethnicity such as Arab has the lowest percentage of punishment of lower than 20% ever since Sep2019. There is a general trend to note where the percentage of punishment has been dropping for all ethnicities for these three years. This can be because of less crimes or increasing  umber of stop and search conducted.
+
+```{r echo=FALSE, fig.cap="Percentage of punishment by Gwent and South Yorkshire from Oct2017 till Oct2020", out.width="70%", fig.align = 'center', warning=FALSE, message=FALSE}
+ggarrange(gwent.plot2, southyorkshire.plot2,
+                    ncol = 2, nrow = 1)
+```
+
+On the other hand, we can see that in Gwent and South Yorkshire, there are generally very no ethical bias when it comes to punishment made after stop and search. Every ethnicity has a very close percentage of punishment after stop and search is conducted. It is harder to reach a conclusion for Gwent due to the smaller number of data.
+
+## Limitations
+
+There are limitation to our report's investigation methods. First, there were many missing data in the raw data that we decided to just remove instead of refilling This can lead to loss in information in the data. Secondly, there are other variables that we are unable to capture in our data. For example, it is possible that people of a specific ethnicity is usually active at times where police conducts stop and search, this results in higher percentage of being stop and search but does not mean ethnic-specfic bias.
+
+\newpage
+
+# References
+
+
+
+
+
+
+
+
+
+
+
