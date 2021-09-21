@@ -1,0 +1,180 @@
+---
+title: "ST404 Assignment 2 Modeling Part"
+author: "Group K"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE,message=FALSE}
+load("USACrime.rda")
+
+#Library
+library(car)
+library(dplyr)
+library(glmnet)
+library(ggplot2)
+library(corrplot)
+```
+
+## Data cleaning
+Before creating and iterating our final models, we must take the preliminary step of applying the results of the EDA for the USACrime data. 
+
+Firstly, we omit the observations that contain the 52 and 21 missing values of medIncome and pctEmploy respectively, as these have been determined to be MCAR (Missing Completely at Random). Futhermore, there are an additional 92 entries (coming from ownHouseMed, rentMed, ownHouseQrange, and rentQrange) which appear to be entered in place of a missing value.
+
+Additionally, the variable State had some empty levels and those are dropped at the beginning to clean up the variable. The variable region has a level “Pacific” which only contains three observations are all from Alaska. To fix this, the “Pacific” level was merged with “West” as this made the most sense geographically. In the end, region has four levels: Midwest, Northeast, West and South.
+
+Finally, from the EDA, it is recommended that a log2 transformation is applied to both of the outcome variables violentPerPop and nonViolentPerPop, as they are positively skewed. This will improve the robustness of the model. To keep our model, these will be the only transformations we use for now.
+
+```{r echo=FALSE}
+#Data cleaning
+USACrime$ownHousMed[USACrime$ownHousMed==500001]<-NA 
+USACrime$rentMed[USACrime$rentMed==1001]<-NA 
+USACrime$ownHousQrange[USACrime$ownHousQrange==0]<-NA 
+USACrime$rentQrange[USACrime$rentQrange==0]<-NA 
+USACrime <- na.omit(USACrime)
+USACrime$State<-droplevels(USACrime$State)
+levels(USACrime$region) <- c("Midwest", "NorthEast", "West", "South", "West") 
+
+#Create a copy of the original data for future use
+USACrimeCopy <- USACrime
+
+#Drop variables (State and region)
+USACrime = subset(USACrime, select = -c(State,region) )
+
+#Outcome variable Transformation
+USACrime$violentPerPop <- log(USACrime$violentPerPop,2)
+USACrime$nonViolPerPop <- log(USACrime$nonViolPerPop,2)
+
+#Categorical Transformation
+USACrime = USACrime %>% mutate(pctUrban = ifelse(pctUrban >= 85,1,0))
+
+#Log2 Transformations
+USACrime$medIncome <- log(USACrime$medIncome,2)
+USACrime$pctLowEdu <- log(USACrime$pctLowEdu,2)
+USACrime$pctUnemploy <- log(USACrime$pctUnemploy,2)
+
+#Log2+1 Transformations
+USACrime$pctKidsBornNevrMarr <- log(USACrime$pctKidsBornNevrMarr+1,2)
+USACrime$pctVacantBoarded <- log(USACrime$pctVacantBoarded+1,2)
+
+#Power Transformations
+USACrime$pctEmploy <- (USACrime$pctEmploy)^2
+USACrime$pctHousOccup <- (USACrime$pctHousOccup)^3
+
+#Root Transformations
+USACrime$pctVacant6up <- sqrt(USACrime$pctVacant6up)
+USACrime$popDensity <- sqrt(USACrime$popDensity)
+```
+
+## Variable choice
+
+The first variables we will leave out of the model are the State and region variables. We suggest dropping the State variable, as it has a very large number of levels and may be difficult to interpret. There are also several states with a small number of observations, so the estimates may not be very reliable.
+
+We can see that all of the variables medIncome, ownHouseMed, ownHousQrange, rentMed and rentQrange, which are related to measuring income/wealth, exhibit strong positive linear correlation with each other (correlation coefficients in excess of 0.6). Therefore, only one income related variable will be needed in the model. The relationship between income related variables is stronger than any individual income related variable to the outcomes. This can be seen in the following correlation matrix:
+
+```{r, echo=FALSE, figures-side2, fig.show="hold", out.width="60%", fig.align = 'center'}
+vars <- c("medIncome","rentMed" , "rentQrange" , "ownHousMed" , "ownHousQrange", "nonViolPerPop","violentPerPop")
+M <- cor(na.omit(USACrime[vars]))
+corrplot(M, type = "upper", method = "color", addCoef.col = "black", tl.cex = 1)
+```
+
+Therefore, to avoid problems related to multicollinearity, we should only include one of the 5 income related variables in the model. Since medIncome has the strongest correlation with both outcome variables, we would suggest this would be the variable to include.
+
+Indeed, by looking at multicollinearity before and after we make these changes to the variable selection by calculating the VIF (Variance Inflation Factor), no variable has a VIF>5 in the latter case.
+
+*VIF with all variables included*
+```{r, echo=FALSE}
+model1 <- lm(violentPerPop ~ pctUrban + medIncome + pctWdiv + pctLowEdu + pctNotHSgrad + 
+               pctCollGrad + pctUnemploy + pctEmploy +pctKids2Par + pctKidsBornNevrMarr + pctHousOccup +
+               pctHousOwnerOccup + pctVacantBoarded + pctVacant6up + ownHousMed + ownHousQrange + rentMed +
+               rentQrange + popDensity + pctForeignBorn, data = USACrime)
+vif(model1)
+```
+
+*VIF after removing selected variables*
+```{r, echo=FALSE}
+model1 <- lm(violentPerPop ~ pctUrban + medIncome + pctLowEdu +
+               pctUnemploy + pctEmploy + pctKidsBornNevrMarr + pctHousOccup +
+               pctHousOwnerOccup + pctVacantBoarded + pctVacant6up +
+               popDensity + pctForeignBorn, data = USACrime)
+vif(model1)
+```
+
+## Modeling
+
+With the problem of collinearity solved, we go on to building our linear regression models.
+We have chose to use **LASSO regression** for model building for several reasons:
+
+1) LASSO regression is able to perform **variable selection**, this means that only variables that helps predict our outcome variables will be used in our model and the rest will be removed from the model (coefficient equals zero). This helps the model to have less predictor variables, be less complex and have stronger explanation power.
+
+2) LASSO regression have a **penalized likelihood strategy**. This means that our model is not overfitted to our trained data, allowing it to work as well with future data. However, this will also result in our model having higher MSE with our trained data compared to a normal linear model, but we believe that it is a worthy trade-off between bias and variance.
+
+Compared to the other models, Stepwise regression with AIC and/or BIC or Ridge regression, both lacks an aspect that LASSO regression is able to provide. Hence, we decide on LASSO regression as our choice of model.
+
+### LASSO regression model for violent Crimes
+
+While building LASSO regression model, we used 10-fold Cross Validation to find the optimal $\lambda$. The graph below shows $log(\lambda)$ versus Mean-Squared Error of the model with the top row showing the number of variables in the model. To make sure our model's explanation power, we will keep the number of variables of our model equal to or below 10.
+
+```{r echo=FALSE}
+USACrimeLasso.viol = subset(USACrime, select = c(violentPerPop, pctUrban, medIncome, pctLowEdu, pctUnemploy,
+                                                 pctEmploy, pctKidsBornNevrMarr, pctHousOccup, pctHousOwnerOccup, 
+                                                 pctVacantBoarded, pctVacant6up, popDensity, pctForeignBorn))
+
+exp.variables <- data.matrix(USACrimeLasso.viol[,2:13])
+out.variables <- USACrimeLasso.viol$violentPerPop
+
+#Fit and testing the lasso model
+lassoviol.fit <- cv.glmnet(exp.variables, out.variables, type.measure = "mse", alpha = 1, family = "gaussian")
+lassoviol.predicted <- predict(lassoviol.fit, s = lassoviol.fit$lambda.min, newx = exp.variables)
+
+plot(lassoviol.fit, main = "10-fold Cross-Validation for optimal Lambda")
+```
+
+As we can see from the graph, the optimal value of $\lambda$ is ``r lassoviol.fit$lambda.min``.
+
+With this value of $\lambda$, we have our LASSO regression model. The coefficients for each variables are:
+
+```{r echo=FALSE}
+printSpMatrix(coef(lassoviol.fit))
+```
+
+The Mean-Squared Error for our model is ``r mean((out.variables -lassoviol.predicted)^2)``.
+
+
+
+
+
+
+### LASSO regression model for non-violent crimes
+
+Similar to the LASSO model predicting violent crimes, we used 10-fold Cross Validation to find the optimal $\lambda$ for our non-violent crime model as well. The graph below shows $log(\lambda)$ versus Mean-Squared Error of the non-violent crime model with the top row showing the number of variables in the model.
+
+```{r echo=FALSE}
+USACrimeLasso.nonviol = subset(USACrime, select = c(nonViolPerPop, pctUrban, medIncome, pctLowEdu, pctUnemploy,
+                                                 pctEmploy, pctKidsBornNevrMarr, pctHousOccup, pctHousOwnerOccup,
+                                                 pctVacantBoarded, pctVacant6up, popDensity, pctForeignBorn))
+
+exp.variables <- data.matrix(USACrimeLasso.nonviol[,2:13])
+out.variables <- USACrimeLasso.nonviol$nonViolPerPop
+
+#Fit and testing the lasso model
+lassononviol.fit <- cv.glmnet(exp.variables, out.variables, type.measure = "mse", alpha = 1, family = "gaussian")
+lassononviol.predicted <- predict(lassononviol.fit, s = lassononviol.fit$lambda.min, newx = exp.variables)
+
+plot(lassononviol.fit, main = "10-fold Cross-Validation for optimal Lambda")
+```
+
+As we can see from the graph, the optimal value of $\lambda$ is ``r lassononviol.fit$lambda.min``.
+
+With this value of $\lambda$, we have our LASSO regression model. The coefficients for each variables are:
+
+```{r echo=FALSE}
+printSpMatrix(coef(lassononviol.fit))
+```
+
+The Mean-Squared Error for our model is ``r mean((out.variables - lassononviol.predicted)^2)``.

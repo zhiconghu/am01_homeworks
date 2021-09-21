@@ -1,0 +1,15 @@
+\contentsline {section}{Findings}{2}{section*.2}
+\contentsline {subsection}{Recommendations from Exploratory Data Analysis}{2}{section*.3}
+\contentsline {subsection}{Modelling}{2}{section*.4}
+\contentsline {subsection}{Model Diagnostics}{3}{section*.5}
+\contentsline {subsection}{Residual Analysis}{4}{section*.6}
+\contentsline {subsection}{Limitations of our Model}{5}{section*.7}
+\contentsline {section}{Statistical Methodology}{6}{section*.8}
+\contentsline {subsection}{Data cleaning}{6}{section*.9}
+\contentsline {subsection}{Variable choice}{6}{section*.10}
+\contentsline {subsection}{Modelling}{8}{section*.11}
+\contentsline {subsubsection}{LASSO regression model for violent Crimes}{8}{section*.12}
+\contentsline {subsubsection}{LASSO regression model for non-violent crimes}{9}{section*.13}
+\contentsline {subsection}{Residual Analysis}{10}{section*.14}
+\contentsline {subsection}{Limitations of our Model}{12}{section*.15}
+\contentsline {section}{Appendix}{13}{section*.16}
