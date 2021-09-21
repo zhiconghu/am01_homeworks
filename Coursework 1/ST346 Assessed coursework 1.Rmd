@@ -1,0 +1,111 @@
+---
+title: 'ST346: Assessed coursework 1'
+author: "u1801116"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1(a)
+
+Load data courseworkData1.rda, then fit a null Poisson regression model with number of claims as the outcome and name it `glm.out1`.
+
+```{r 1a}
+load("courseworkData1.rda")
+glm.out1 = glm(formula = y ~ 1 + offset(log(n)), family = "poisson", data = insurance)
+glm.out1
+```
+
+As we can see from the summary of `glm.out1`, the intercept of the model is -2.00326, now check it with equation.
+
+```{r checkintercept}
+intercept = log(sum(insurance$y)/sum(insurance$n))
+intercept
+```
+
+The equation also equals to -2.00326.
+
+## 1(b)
+
+Fit a Poisson regression model with predictor variables `car`, `age`, `district`.
+
+```{r 1b}
+glm.out2 = glm(formula = y ~ factor(car) + factor(age) + district + offset(log(n)), family = "poisson", data = insurance)
+modelsum <- summary(glm.out2)
+exp(modelsum$coefficients["district","Estimate"])
+```
+
+An estimate of the rate ratio is ``r exp(modelsum$coefficients["district","Estimate"])``, the rate of insurance claims is higher in urban areas than rural areas.
+
+## 1(c)
+
+```{r 1c, message=FALSE, eval=FALSE}
+glm.max = glm(formula = y ~ (factor(car) + factor(age) + district + offset(log(n)))^2, family = "poisson", data = insurance)
+step(glm.max, direction = "both")
+```
+
+As we shown from the results, AIC is minimal at 208.07 when model is the same as the one in 1(b), therefore the maximal model is the one shown in 1(b).
+
+## 1(d)
+
+```{r 1d}
+glm.out3 = glm(formula = y ~ factor(car) + age + district + offset(log(n)), family = "poisson", data = insurance)
+anovatable = anova(glm.out2, glm.out3, test = "LRT")
+anovatable
+```
+
+As Pr(>Chi) is ``r anovatable$"Pr(>Chi)"[2]``, according to 0.05 level of significance, there are no significant differences between the two model.
+
+## 1(e)
+
+The used model is `glm.out3`.
+
+```{r 1e}
+summary(glm.out3)
+exp(summary(glm.out3)$coefficients["factor(car)4","Estimate"])
+```
+
+Therefore, the new insurance premium is ``r exp(summary(glm.out3)$coefficients["factor(car)4","Estimate"])``.
+
+## 2(a)
+
+```{r 2a, message=FALSE}
+library(dplyr)
+glm.out4 = glm(deaths ~ smoking + offset(log(personyears)), 
+               family = "poisson", data = doctors)
+summary(glm.out4)
+smoker = filter(doctors, smoking == 1)
+nosmoker = filter(doctors, smoking == 0)
+lambda1 = sum(smoker$deaths)/sum(smoker$personyears)
+lambda0 = sum(nosmoker$deaths)/sum(nosmoker$personyears)
+log(lambda1/lambda0)
+```
+
+As we can see, the value is the same as the estimate of coefficient for smoking.
+
+## 2(b)
+
+```{r 2b}
+glm.out5 = glm(deaths ~ factor(age) + smoking + offset(log(personyears)), 
+               family = "poisson", data = doctors)
+summary(glm.out5)$coefficients["smoking","Estimate"]
+```
+
+The estimate of $\beta$ drops to ``r summary(glm.out5)$coefficients["smoking","Estimate"]``.
+
+## 2(c)
+
+Shown from the two diagrams, the model in 2b is clearly not appropriate as there is a relationship between age and smoking. Using stratified parameterization for the new model.
+
+```{r 2c}
+glm.out6 = glm(deaths ~ (factor(age)/factor(smoking)) + offset(log(personyears)), 
+               family = "poisson", data = doctors)
+summary(glm.out6)
+exp(summary(glm.out6)$coefficients["factor(age)65 to 74:factor(smoking)1","Estimate"])
+```
+
+The mortality rate ratio is ``r exp(summary(glm.out6)$coefficients["factor(age)65 to 74:factor(smoking)1","Estimate"])`` and p-value is ``r summary(glm.out6)$coefficients["factor(age)65 to 74:factor(smoking)1","Pr(>|z|)"]``.

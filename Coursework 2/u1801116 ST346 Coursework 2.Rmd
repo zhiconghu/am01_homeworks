@@ -1,0 +1,155 @@
+---
+title: "ST346 Coursework 2"
+author: "u1801116"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1(a)
+
+Load data courseworkData2.rda.
+
+```{r}
+load("courseworkData2.rda")
+```
+
+Fit a null and max Poisson regression model with total number of damage incidents as the outcome. Then, based on AIC, find the best model and look at the model.
+
+```{r eval=FALSE}
+glm.out1 <- glm(incidents ~ 1 + offset(log(service)), family=poisson(), 
+                data=ships)
+glm.out2 <- glm(incidents ~ (type + year + period)^2 + offset(log(service)), 
+                family=poisson(), data=ships)
+step(glm.out1, direction="both", 
+     scope=list("lower"=glm.out1, "upper"=glm.out2))
+glm.out3 <- glm(incidents ~ year + type + period + year:type + 
+                offset(log(service)), family=poisson(), 
+                data=ships)
+summary(glm.out3)
+```
+
+However, this model is clearly inappropriate. Based on AIC, we look at the next best model.
+
+```{r}
+glm.out4 <- glm(incidents ~ year + type + period + offset(log(service)), 
+                family=poisson(), data=ships)
+summary(glm.out4)
+```
+
+Hence, glm.out4 is our final model.
+
+# 1(b)
+
+Look at the summary of the model, we can see that a ship of type E, constructed on year 1970 to year 1974 and have period of operation between 1975 to 1979 have the highest risk of damage.
+
+# 1(c)
+
+Extracting coefficients from the summary of the model glm.out4.
+
+```{r}
+expected = exp(summary(glm.out4)$coefficients["(Intercept)","Estimate"] + 
+               summary(glm.out4)$coefficients["typeE","Estimate"] + 
+               summary(glm.out4)$coefficients["year1970-74","Estimate"] +
+               summary(glm.out4)$coefficients["period1975-79","Estimate"])*
+  3353*(1/5)
+expected
+```
+
+The expected number of damage incidents in twelve months for the class of shipping at 1(b) is ``r expected``.
+
+# 2(a)
+
+**Exponential Dispersion Model**: Binomial
+
+**Link function**: Logit
+
+**Outcome variable**: Number of school leavers who have a place at university or other higher education institute divided by total number of school leavers
+
+**Predictor variable**: age, gender and smoking status
+
+# 2(b)
+
+**Exponential Dispersion Model**: Normal
+
+**Link function**: Identity
+
+**Outcome variable**: change in weights of individual rats after six month separated in two groups
+
+**Predictor variable**: vitamin D intake in factor
+
+# 2(c)
+
+**Exponential Dispersion Model**: Poisson
+
+**Link function**: Log
+
+**Outcome variable**: log of number of times of break downs divided by number of miles driven
+
+**Predictor variable**: model of the vehicle and number of times that it has been serviced
+
+# 3(a)
+
+Add a new column in the data frame that represents the total number of participants for each group.
+
+```{r}
+esoph$participants <- esoph$ncases + esoph$ncontrols
+```
+
+Fit a null and max Binomial regression model with percentage of participants with esophageal cancer as the outcome. Then, based on AIC, find the best model.
+
+```{r warning=FALSE, results="hide"}
+glm.out5 <- glm(ncases/participants ~ 1, family=binomial(), 
+                weight=participants,data=esoph)
+glm.out6 <- glm(ncases/participants ~ (agegp + alcgp + tobgp)^2, 
+                family=binomial(), weight=participants, data=esoph)
+step(glm.out5, direction="both", 
+     scope=list("lower"=glm.out5, "upper"=glm.out6))
+```
+
+We now look at the model.
+
+```{r}
+glm.out7 <- glm(ncases/participants ~ alcgp + agegp + tobgp, 
+                family=binomial(), weight=participants, 
+                data=esoph)
+summary(glm.out7)
+```
+
+Hence, glm.out7 is our best model.
+
+# 3(b)
+
+```{r}
+glm.out8 <- glm(ncases/participants ~ as.numeric(alcgp) + agegp + tobgp, 
+                family=binomial(), weight=participants, data=esoph)
+anova(glm.out8, glm.out5, "LRT")
+
+glm.out9 <- glm(ncases/participants ~ alcgp + as.numeric(agegp) + tobgp, 
+                family=binomial(), weight=participants, data=esoph)
+anova(glm.out9, glm.out5, "LRT")
+
+glm.out10 <- glm(ncases/participants ~ alcgp + agegp + as.numeric(tobgp), 
+                 family=binomial(), weight=participants, data=esoph)
+anova(glm.out10, glm.out5, "LRT")
+
+summary(glm.out10)
+```
+
+From the ANOVA tables, we can see that the p-value for `glm.out10` is 0.17, this means that there is no evidence to reject `glm.out10` from the null model. The variable `tobgp` should be a numeric value.
+
+# 3(c)
+
+```{r}
+odds_ratio = exp(summary(glm.out10)$coefficients["alcgp120+","Estimate"])
+odds_ratio
+```
+
+The odds ratio of esophageal cancer for a participant who drinks more than 120g of alcohol/day compared with one who drinks less than 40g of alcohol per day is ``r odds_ratio``.
+
+# 4
+
